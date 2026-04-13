@@ -47,7 +47,7 @@
 #define ADXL335_ADC_MAX         4095.0f       /* 2^12 - 1             */
 
 /* Number of samples averaged per reading (power-of-2 recommended) */
-#define ADXL335_DEFAULT_SAMPLES 64
+#define ADXL335_DEFAULT_SAMPLES 32
 
 /* ------------------------------------------------------------------ */
 /*  Data structures                                                     */
@@ -139,10 +139,8 @@ float adxl335_magnitude_g(const ADXL335_Data *data);
  * Perform a simple runtime calibration.
  *
  * Place the sensor flat (Z axis pointing up) and call this function.
- * It measures the current zero-g offset for X and Y, and uses the Z
- * reading as the 1g reference to refine sensitivity.
+ * It stores the calibrated zero-g offset for X, Y and Z. 
  *
- * The corrected zero_g_v and sensitivity_v are stored back in dev.
  *
  * @param dev          Pointer to an initialised ADXL335 struct
  * @param cal_samples  Number of samples to average for calibration

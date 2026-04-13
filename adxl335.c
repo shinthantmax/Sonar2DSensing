@@ -99,7 +99,7 @@ void adxl335_read_g(const ADXL335 *dev, ADXL335_Data *out)
 
     out->x = _voltage_to_g(vx, dev->x_zero_g_v, dev->sensitivity_v);
     out->y = _voltage_to_g(vy, dev->y_zero_g_v, dev->sensitivity_v);
-    out->z = _voltage_to_g(vz, dev->z_zero_g_v, dev->sensitivity_v) + 1; //norminal is one
+    out->z = _voltage_to_g(vz, dev->z_zero_g_v, dev->sensitivity_v); //norminal is one
 }
 
 void adxl335_read_ms2(const ADXL335 *dev, ADXL335_Data *out)
@@ -119,17 +119,6 @@ float adxl335_magnitude_g(const ADXL335_Data *data)
 
 void adxl335_calibrate(ADXL335 *dev, uint cal_samples)
 {
-    /*
-     * Calibration procedure (sensor must be flat, Z-axis pointing up):
-     *
-     *  1. X and Y should read 0 g  → measure their actual voltage as zero_g_v.
-     *     We compute a per-axis offset but store a single averaged zero_g_v
-     *     (the sensor's mid-supply reference) for simplicity.
-     *  2. Z should read +1 g       → use this to back-calculate sensitivity.
-     *
-     * For a more advanced calibration (per-axis offsets) you can extend
-     * the ADXL335 struct with x_offset_v / y_offset_v / z_offset_v fields.
-     */
 
     uint saved_samples  = dev->num_samples;
     dev->num_samples    = cal_samples;
@@ -143,21 +132,10 @@ void adxl335_calibrate(ADXL335 *dev, uint cal_samples)
     float vy = _raw_to_voltage(raw.y, dev->vcc);
     float vz = _raw_to_voltage(raw.z, dev->vcc);
 
-    /*
-     * X and Y are at 0 g → their voltages should equal the zero-g reference.
-     * Average them to get a refined zero_g_v.
-     */
+    
     dev->x_zero_g_v = vx;
     dev->y_zero_g_v = vy;
-    dev->z_zero_g_v = vz;
+    dev->z_zero_g_v = vz - dev->sensitivity_v; //avg z_v (one g) - v per one g
 
-    /*
-     * Z is at +1 g → sensitivity = (Vz - zero_g_v) / 1g
-     * Guard against a nonsensical reading (sensor not flat or bad wiring).
-     */
-    // float sens = vz - dev->z_zero_g_v;
-    // if (sens > 0.150f && sens < 0.450f) {   /* sanity: 150–450 mV/g */
-    //     dev->sensitivity_v = sens;
-    // }
-    /* else: keep the datasheet default (300 mV/g) */
+    
 }

@@ -53,6 +53,7 @@ target_link_libraries(SONAR2DSENSING
         pico_stdlib
         hardware_adc
         hardware_gpio
+        pico_multicore
         m          # math library for sqrtf()
         )
 
