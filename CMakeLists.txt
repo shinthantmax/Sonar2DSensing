@@ -28,30 +28,38 @@ set(PICO_BOARD pico2 CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(HCSR04 C CXX ASM)
+project(SONAR2DSENSING C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(HCSR04 HCSR04.c )
+add_executable(SONAR2DSENSING 
+    main.c
+    hcsr04.c
+    adxl335.c
+    )
 
-pico_set_program_name(HCSR04 "HCSR04")
-pico_set_program_version(HCSR04 "0.1")
+pico_set_program_name(SONAR2DSENSING "SONAR")
+pico_set_program_version(SONAR2DSENSING "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(HCSR04 1)
-pico_enable_stdio_usb(HCSR04 1)
+pico_enable_stdio_uart(SONAR2DSENSING 1)
+pico_enable_stdio_usb(SONAR2DSENSING 1)
 
 # Add the standard library to the build
-target_link_libraries(HCSR04
-        pico_stdlib)
+target_link_libraries(SONAR2DSENSING
+        pico_stdlib
+        hardware_adc
+        hardware_gpio
+        m          # math library for sqrtf()
+        )
 
 # Add the standard include files to the build
-target_include_directories(HCSR04 PRIVATE
+target_include_directories(SONAR2DSENSING PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
 )
 
-pico_add_extra_outputs(HCSR04)
+pico_add_extra_outputs(SONAR2DSENSING)
 
