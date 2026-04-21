@@ -102,14 +102,20 @@ typedef struct {
 void adxl335_init(ADXL335 *dev,
                   uint x_pin, uint y_pin, uint z_pin,
                   uint num_samples);
-
 /**
- * Read raw 12-bit ADC values for all three axes.
+ * Read raw 12-bit ADC values for all three axes with one sample only.
  *
  * @param dev  Pointer to an initialised ADXL335 struct
  * @param out  Pointer to ADXL335_Raw struct to fill
  */
 void adxl335_read_raw(const ADXL335 *dev, ADXL335_Raw *out);
+/**
+ * Read avg 12-bit ADC values for all three axes.
+ *
+ * @param dev  Pointer to an initialised ADXL335 struct
+ * @param out  Pointer to ADXL335_Raw struct to fill
+ */
+void adxl335_read_avg(const ADXL335 *dev, ADXL335_Raw *out);
 
 /**
  * Read acceleration in g for all three axes.

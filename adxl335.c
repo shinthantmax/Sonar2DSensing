@@ -28,10 +28,10 @@ static uint16_t _adc_read_avg(uint channel, uint num_samples)
     
     adc_select_input(channel);
     avg = adc_read();
-    sleep_us(100); //necessary delay for accurate readings
-    for (uint i = 0; i < num_samples; i++) {
+    sleep_us(10); //necessary delay for accurate readings
+    for (uint i = 1; i < num_samples; i++) {
         avg = (avg + adc_read()) >> 1; //divided by 2
-        sleep_us(100); //necessary delay for accurate readings
+         sleep_us(10); //necessary delay for accurate readings
     }
     return avg;
 }
@@ -83,6 +83,13 @@ void adxl335_init(ADXL335 *dev,
 
 void adxl335_read_raw(const ADXL335 *dev, ADXL335_Raw *out)
 {
+    out->x = _adc_read_avg(dev->x_adc_ch, 1);
+    out->y = _adc_read_avg(dev->y_adc_ch, 1);
+    out->z = _adc_read_avg(dev->z_adc_ch, 1);
+}
+
+void adxl335_read_avg(const ADXL335 *dev, ADXL335_Raw *out)
+{
     out->x = _adc_read_avg(dev->x_adc_ch, dev->num_samples);
     out->y = _adc_read_avg(dev->y_adc_ch, dev->num_samples);
     out->z = _adc_read_avg(dev->z_adc_ch, dev->num_samples);
@@ -91,7 +98,7 @@ void adxl335_read_raw(const ADXL335 *dev, ADXL335_Raw *out)
 void adxl335_read_g(const ADXL335 *dev, ADXL335_Data *out)
 {
     ADXL335_Raw raw;
-    adxl335_read_raw(dev, &raw);
+    adxl335_read_avg(dev, &raw);
 
     float vx = _raw_to_voltage(raw.x, dev->vcc);
     float vy = _raw_to_voltage(raw.y, dev->vcc);
@@ -124,7 +131,7 @@ void adxl335_calibrate(ADXL335 *dev, uint cal_samples)
     dev->num_samples    = cal_samples;
 
     ADXL335_Raw raw;
-    adxl335_read_raw(dev, &raw);
+    adxl335_read_avg(dev, &raw);
 
     dev->num_samples = saved_samples;   /* restore */
 
