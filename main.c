@@ -6,6 +6,7 @@
 
 #define HCSR04_ECHO_PIN1 13
 #define HCSR04_ECHO_PIN2 12
+#define HCSR04_RECEIVER_EXTERNAL 1
 // Core 1 Main Code
 
 float g_sonardist[2];
@@ -16,13 +17,15 @@ void core1_entry() {
     hcsr04_init(&pair1,
                 HCSR04_DEFAULT_TRIG_PIN,   /* GP14 */
                 HCSR04_ECHO_PIN1,   /* GP13 */
-                HCSR04_TIMEOUT_US);
+                HCSR04_TIMEOUT_US,
+                HCSR04_RECEIVER_EXTERNAL);
     
     HCSR04 pair2; //the pair of tranmitter and receiver 1
     hcsr04_init(&pair2,
                 HCSR04_DEFAULT_TRIG_PIN,   /* GP14 */
                 HCSR04_ECHO_PIN2,   /* GP12 */
-                HCSR04_TIMEOUT_US);
+                HCSR04_TIMEOUT_US,
+                HCSR04_RECEIVER_EXTERNAL);
     
     while(1){
         g_sonardist[0] = hcsr04_read_cm(&pair1);

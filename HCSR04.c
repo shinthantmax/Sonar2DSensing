@@ -69,11 +69,12 @@ static uint32_t _measure_pulse_us(const HCSR04 *sensor)
 /*  Public API                                                          */
 /* ------------------------------------------------------------------ */
 
-void hcsr04_init(HCSR04 *sensor, uint trig_pin, uint echo_pin, uint timeout_us)
+void hcsr04_init(HCSR04 *sensor, uint trig_pin, uint echo_pin, uint timeout_us, uint8_t receiver_setup)
 {
     sensor->trig_pin   = trig_pin;
     sensor->echo_pin   = echo_pin;
     sensor->timeout_us = timeout_us;
+    sensor->receiver_setup = receiver_setup;
 
     /* TRIG: output, start LOW */
     gpio_init(trig_pin);
@@ -92,6 +93,14 @@ float hcsr04_read_cm(const HCSR04 *sensor)
     if (pulse_us == 0) {
         return HCSR04_OUT_OF_RANGE;
     }
-    /* Distance = (pulse_width / 2) * speed_of_sound */
-    return (float)pulse_us * SOUND_SPEED_CM_US / 2.0f;
+
+    if(sensor->receiver_setup){
+        /*straight line distance between the sensors*/
+        return (float)pulse_us * SOUND_SPEED_CM_US; 
+    }
+    else{
+        /* Distance = (pulse_width / 2) * speed_of_sound */
+        return (float)pulse_us * SOUND_SPEED_CM_US / 2.0f;
+    }
+    
 }
