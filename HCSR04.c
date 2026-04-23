@@ -11,16 +11,44 @@
 /*  Private helpers                                                     */
 /* ------------------------------------------------------------------ */
 
-/**
- * Send a 10 µs HIGH pulse on TRIG to start a measurement.
- */
-static void _trigger(const HCSR04 *sensor)
-{
-    gpio_put(sensor->trig_pin, 0);
-    sleep_us(2);                  /* ensure TRIG is LOW before pulse   */
-    gpio_put(sensor->trig_pin, 1);
-    sleep_us(10);                 /* 10 µs trigger pulse                */
-    gpio_put(sensor->trig_pin, 0);
+#define HCSR04_ECHO_PIN1 13
+#define HCSR04_ECHO_PIN2 12
+
+#define DEVICE_COUNT 2
+
+volatile uint64_t start_time[ DEVICE_COUNT ];
+volatile uint64_t pulse_time[ DEVICE_COUNT ];
+uint8_t time_ready [DEVICE_COUNT];
+
+//translate gpio pin to array index
+uint8_t _get_index(uint gpio){
+    if (gpio == HCSR04_ECHO_PIN1) {
+       return 0;
+    }
+    else{
+        return 1;
+    }
+}
+
+// Interrupt callback
+void gpio_isr(uint gpio, uint32_t events) {
+    int index = _get_index(gpio);
+    
+    
+    // Rising edge → start timing
+    if (events & GPIO_IRQ_EDGE_RISE) {
+        start_time[index] = time_us_64();
+    }
+
+    // Falling edge → end timing
+    if (events & GPIO_IRQ_EDGE_FALL) {
+        pulse_time[index] = time_us_64() - start_time[index];
+        // if(pulse_time[index] > (HCSR04_TIMEOUT_US/2)){ //3000 is arbitary, check if the value is close to timeout
+        //     time_ready[index] = false;
+        //     pulse_time[index] = 0;
+        // }
+        time_ready[index] = true;
+    }
 }
 
 /**
@@ -48,8 +76,8 @@ static bool _wait_for_level(uint pin, bool level, uint timeout_us)
  */
 static uint32_t _measure_pulse_us(const HCSR04 *sensor)
 {
-    _trigger(sensor);
-
+    // _trigger(sensor);
+    
     /* Wait for ECHO to go HIGH (start of pulse) */
     if (!_wait_for_level(sensor->echo_pin, 1, sensor->timeout_us)) {
         return 0;
@@ -64,6 +92,8 @@ static uint32_t _measure_pulse_us(const HCSR04 *sensor)
 
     return (uint32_t)(end - start);
 }
+
+
 
 /* ------------------------------------------------------------------ */
 /*  Public API                                                          */
@@ -85,11 +115,40 @@ void hcsr04_init(HCSR04 *sensor, uint trig_pin, uint echo_pin, uint timeout_us, 
     gpio_init(echo_pin);
     gpio_set_dir(echo_pin, GPIO_IN);
     gpio_disable_pulls(echo_pin);
+
+     gpio_set_irq_enabled_with_callback(
+        sensor->echo_pin,
+        GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL,
+        true,&gpio_isr);
+    
+}
+
+/**
+ * Send a 10 µs HIGH pulse on TRIG to start a measurement.
+ */
+void hcsr04_trigger(const HCSR04 *sensor)
+{
+    gpio_put(sensor->trig_pin, 0);
+    sleep_us(2);                  /* ensure TRIG is LOW before pulse   */
+    gpio_put(sensor->trig_pin, 1);
+    sleep_us(10);                 /* 10 µs trigger pulse                */
+    gpio_put(sensor->trig_pin, 0);
+}
+
+bool get_time_ready(){
+    
 }
 
 float hcsr04_read_cm(const HCSR04 *sensor)
 {
-    uint32_t pulse_us = _measure_pulse_us(sensor);
+    int index = _get_index(sensor->echo_pin);
+    uint64_t pulse_us = 0;
+
+    if(time_ready[index]){
+        pulse_us = pulse_time[index];
+        time_ready[index] = 0;
+    }
+
     if (pulse_us == 0) {
         return HCSR04_OUT_OF_RANGE;
     }

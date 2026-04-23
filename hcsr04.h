@@ -37,6 +37,13 @@ typedef struct {
  */
 void hcsr04_init(HCSR04 *sensor, uint trig_pin, uint echo_pin, uint timeout_us, uint8_t receiver_setup);
 
+
+/**
+ * Send a 10 µs HIGH pulse on TRIG to start a measurement.
+ * @param sensor  Pointer to an initialised HCSR04 struct
+ */
+void hcsr04_trigger(const HCSR04 *sensor);
+
 /**
  * Trigger a measurement and return the distance in centimetres.
  *
