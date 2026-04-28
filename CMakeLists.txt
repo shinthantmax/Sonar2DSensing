@@ -39,6 +39,7 @@ add_executable(SONAR2DSENSING
     main.c
     hcsr04.c
     adxl335.c
+    icm20948_spi.c
     )
 
 pico_set_program_name(SONAR2DSENSING "SONAR")
@@ -53,6 +54,7 @@ target_link_libraries(SONAR2DSENSING
         pico_stdlib
         hardware_adc
         hardware_gpio
+        hardware_spi
         pico_multicore
         m          # math library for sqrtf()
         )

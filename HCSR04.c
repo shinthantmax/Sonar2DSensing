@@ -27,6 +27,7 @@ uint8_t _get_index(uint gpio){
     }
     else{
         return 1;
+        
     }
 }
 
