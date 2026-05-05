@@ -22,6 +22,11 @@
 #ifndef ICM20948_SPI_H
 #define ICM20948_SPI_H
 
+#define PIN_CS   5
+#define PIN_SCK  2
+#define PIN_MOSI 3
+#define PIN_MISO 4
+
 #include <stdint.h>
 #include <stdbool.h>
 #include "hardware/spi.h"
@@ -80,21 +85,19 @@ typedef struct {
     uint32_t             baudrate;    /**< SPI clock frequency (Hz)         */
     icm20948_gyro_fs_t   gyro_fs;    /**< Gyro full-scale range             */
     icm20948_accel_fs_t  accel_fs;   /**< Accel full-scale range            */
-    bool                 mag_enable;  /**< Enable AK09916 magnetometer       */
 } icm20948_config_t;
 
 /** Default config macro – 8 MHz SPI, ±250°/s gyro, ±4 g accel, mag on */
-#define ICM20948_CONFIG_DEFAULT(spi_inst, cs, sck, mosi, miso)  \
-    {                                                            \
-        .spi        = (spi_inst),                               \
-        .pin_cs     = (cs),                                     \
-        .pin_sck    = (sck),                                    \
-        .pin_mosi   = (mosi),                                   \
-        .pin_miso   = (miso),                                   \
+#define ICM20948_CONFIG_DEFAULT(spi_inst)           \
+    {                                               \
+        .spi        = (spi_inst),                   \
+        .pin_cs     = PIN_CS,                                     \
+        .pin_sck    = PIN_SCK,                                    \
+        .pin_mosi   = PIN_MOSI,                                   \
+        .pin_miso   = PIN_MISO,                                   \
         .baudrate   = 8000000,                                  \
         .gyro_fs    = ICM20948_GYRO_FS_250,                     \
         .accel_fs   = ICM20948_ACCEL_FS_4G,                     \
-        .mag_enable = true,                                      \
     }
 
 /* -------------------------------------------------------------------------
@@ -128,6 +131,14 @@ typedef struct {
     bool  mag_valid;          /**< true when mag data is fresh & no overflow */
 } icm20948_data_t;
 
+typedef struct {
+    int16_t ax, ay, az;        /**< Acceleration  (m/s²)  */
+    int16_t gx, gy, gz;        /**< Angular rate   (°/s)  */
+    int16_t mx, my, mz;        /**< Magnetic field  (µT)  */
+    int16_t temperature;        /**< Die temperature (°C)  */
+    bool  mag_valid;          /**< true when mag data is fresh & no overflow */
+} icm20948_raw_t;
+
 /* =========================================================================
  * Public API
  * ====================================================================== */
@@ -153,21 +164,24 @@ icm20948_err_t icm20948_init(icm20948_dev_t *dev, const icm20948_config_t *cfg);
  * @return ICM20948_OK, or ICM20948_ERR_MAG_* for non-fatal mag issues.
  */
 icm20948_err_t icm20948_read_all(icm20948_dev_t *dev,
-                                  icm20948_data_t *out,
+                                  icm20948_raw_t *out,
                                   const icm20948_cal_t *cal);
 
-/** @brief Read acceleration only (m/s²). */
+/** @brief Read Accelerometer ADC only*/
 icm20948_err_t icm20948_read_accel(icm20948_dev_t *dev,
-                                    float *ax, float *ay, float *az);
+                                    int16_t *ax, int16_t *ay, int16_t *az);
 
-/** @brief Read gyroscope only (°/s). */
+/** @brief Read gyroscope ADC only*/
 icm20948_err_t icm20948_read_gyro(icm20948_dev_t *dev,
-                                   float *gx, float *gy, float *gz);
+                                   int16_t *gx, int16_t *gy, int16_t *gz);
 
-/** @brief Read magnetometer only (µT). mag_valid set false on overflow/not-ready. */
-icm20948_err_t icm20948_read_mag(icm20948_dev_t *dev,
-                                  float *mx, float *my, float *mz,
-                                  bool *mag_valid);
+/** @brief Convert Raw ADC to m/s^2*/                                 
+void icm20948_convert_accel(icm20948_dev_t *dev,
+                        icm20948_raw_t *raw, icm20948_data_t *data);
+
+/** @brief Convert Raw Gyro to deg/s*/             
+void icm20948_convert_gyro(icm20948_dev_t *dev,
+                        icm20948_raw_t *raw, icm20948_data_t *data);
 
 /** @brief Read die temperature (°C). */
 icm20948_err_t icm20948_read_temp(icm20948_dev_t *dev, float *temp_c);

@@ -23,8 +23,6 @@ HCSR04 receiver2; //the pair of tranmitter and receiver 1
 #define PIN_MISO 4
  
 
-
-
 float g_sonardist[2];
 void core1_entry() {
 
@@ -63,42 +61,37 @@ int main(void)
     stdio_init_all();
     /* Give USB-serial a moment to connect (optional) */
     sleep_ms(2000);
-
- 
-    /* Initialise sensor on GP26/27/28 with 64-sample averaging */
-    ADXL335 accel;
-    adxl335_init(&accel,
-                 ADXL335_DEFAULT_X_PIN,   /* GP26 – ADC0 */
-                 ADXL335_DEFAULT_Y_PIN,   /* GP27 – ADC1 */
-                 ADXL335_DEFAULT_Z_PIN,   /* GP28 – ADC2 */
-                 ADXL335_DEFAULT_SAMPLES);
- 
-    
-    printf("Calibrating – keep sensor flat...\n");
-    adxl335_calibrate(&accel, 512);
- 
- 
-    ADXL335_Data  g_data;
-    ADXL335_Data  ms2_data;
-    ADXL335_Raw   raw;
     
     multicore_launch_core1(core1_entry); //start core 1
-
-
-
-        printf("=== ICM-20948 SPI demo ===\n");
  
+    /* Initialise sensor on GP26/27/28 with 64-sample averaging */
+    // ADXL335 accel;
+    // adxl335_init(&accel,
+    //              AXDL335_DEFAULT_X_PIN,   /* GP26 – ADC0 */
+    //              ADXL335_DEFAULT_Y_PIN,   /* GP27 – ADC1 */
+    //              ADXL335_DEFAULT_Z_PIN,   /* GP28 – ADC2 */
+    //              ADXL335_DEFAULT_SAMPLES);
+ 
+    
+    // printf("Calibrating – keep sensor flat...\n");
+    // adxl335_calibrate(&accel, 512);
+ 
+ 
+    // ADXL335_Data  g_data;
+    // ADXL335_Data  ms2_data;
+    // ADXL335_Raw   raw;
+    
+    
+    /*Initialize icm20948*/
     /* Build configuration */
-    icm20948_config_t cfg = ICM20948_CONFIG_DEFAULT(
-        spi0, PIN_CS, PIN_SCK, PIN_MOSI, PIN_MISO
-    );
-    cfg.gyro_fs    = ICM20948_GYRO_FS_250;
-    cfg.accel_fs   = ICM20948_ACCEL_FS_4G;
-    cfg.mag_enable = true;
- 
+    icm20948_config_t cfg = ICM20948_CONFIG_DEFAULT(spi0);
+    // cfg.gyro_fs    = ICM20948_GYRO_FS_250;
+    // cfg.accel_fs   = ICM20948_ACCEL_FS_4G;
+    
     /* Initialise driver */
     icm20948_dev_t imu;
     icm20948_err_t err = icm20948_init(&imu, &cfg);
+    printf("Hello1");
     if (err != ICM20948_OK) {
         printf("ERROR: icm20948_init() returned %d\n", err);
         while (1) tight_loop_contents();
@@ -116,8 +109,8 @@ int main(void)
         .mag_scale    = { 1.0f, 1.0f, 1.0f },
     };
  
+    icm20948_raw_t rawdata;
     icm20948_data_t data;
-
 
     while (true) {
         
@@ -137,25 +130,28 @@ int main(void)
         // printf("Accel | X: %6.3f   Y: %6.3f   Z: %6.3f \n",
         //        g_data.x, g_data.y, g_data.z);
 
-        err = icm20948_read_all(&imu, &data, &cal);
+        err = icm20948_read_all(&imu, &rawdata, &cal);
+        
  
-        printf("Accel  [%+7.3f, %+7.3f, %+7.3f] m/s²\n",
+        printf("Accel ADC  [%d, %d, %d] \n",
+               rawdata.ax, rawdata.ay, rawdata.az);
+
+        icm20948_convert_accel(&imu, &rawdata, &data);
+        printf("Accel   [%5.3f, %5.3f, %5.3f] m/s^2 \n",
                data.ax, data.ay, data.az);
-        printf("Gyro   [%+8.3f, %+8.3f, %+8.3f] deg/s\n",
+        
+        printf("Gyro ADC   [%d, %d, %d] \n",
+               rawdata.gx, rawdata.gy, rawdata.gz);
+
+        icm20948_convert_gyro(&imu, &rawdata, &data);
+        printf("Gyro   [%5.3f, %5.3f, %5.3f] deg/s \n",
                data.gx, data.gy, data.gz);
-        printf("Temp   %.2f °C\n", data.temperature);
+        // printf("Temp   %.2f °C\n", data.temperature);
  
-        if (data.mag_valid) {
-            printf("Mag    [%+7.2f, %+7.2f, %+7.2f] uT\n",
-                   data.mx, data.my, data.mz);
-        } else {
-            printf("Mag    (not ready)\n");
-        }
         printf("---\n");
  
-        // sleep_ms(500);
 
-        sleep_ms(5);   /* Minimum recommended interval: 60 ms */
+        sleep_ms(300);   /* Minimum recommended interval: 60 ms */
     }
 
     return 0;

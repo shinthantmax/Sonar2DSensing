@@ -11,6 +11,7 @@
 #include <string.h>
 #include "pico/time.h"
 #include "pico/stdlib.h"
+#include <stdio.h>
 
 /* =========================================================================
  * Internal register map
@@ -142,90 +143,6 @@ static inline int16_t to_s16(uint8_t hi, uint8_t lo) {
     return (int16_t)((uint16_t)hi << 8 | lo);
 }
 
-/* =========================================================================
- * AK09916 I²C-master (SLV4 single-byte transactions)
- * ====================================================================== */
-
-static icm20948_err_t ak_write(icm20948_dev_t *dev, uint8_t reg, uint8_t val) {
-    set_bank(dev, 3);
-    spi_write_reg(dev, REG_I2C_SLV4_ADDR, AK09916_I2C_ADDR);   /* write */
-    spi_write_reg(dev, REG_I2C_SLV4_REG,  reg);
-    spi_write_reg(dev, REG_I2C_SLV4_DO,   val);
-    spi_write_reg(dev, REG_I2C_SLV4_CTRL, 0x80);                /* trigger */
-    set_bank(dev, 0);
-    /* Poll I2C_MST_STATUS[6] (SLV4_DONE) */
-    for (int i = 0; i < 50; i++) {
-        uint8_t s = spi_read_reg(dev, REG_I2C_MST_STATUS);
-        if (s & 0x40) return ICM20948_OK;
-        sleep_ms(2);
-    }
-    return ICM20948_ERR_MAG_TO;
-}
-
-static icm20948_err_t ak_read(icm20948_dev_t *dev,
-                               uint8_t reg, uint8_t *out) {
-    set_bank(dev, 3);
-    spi_write_reg(dev, REG_I2C_SLV4_ADDR, AK09916_I2C_ADDR | 0x80); /* read */
-    spi_write_reg(dev, REG_I2C_SLV4_REG,  reg);
-    spi_write_reg(dev, REG_I2C_SLV4_CTRL, 0x80);
-    set_bank(dev, 0);
-    for (int i = 0; i < 50; i++) {
-        uint8_t s = spi_read_reg(dev, REG_I2C_MST_STATUS);
-        if (s & 0x40) {
-            set_bank(dev, 3);
-            *out = spi_read_reg(dev, REG_I2C_SLV4_DI);
-            set_bank(dev, 0);
-            return ICM20948_OK;
-        }
-        sleep_ms(2);
-    }
-    return ICM20948_ERR_MAG_TO;
-}
-
-/* =========================================================================
- * Magnetometer initialisation
- * ====================================================================== */
-
-static icm20948_err_t init_magnetometer(icm20948_dev_t *dev) {
-    icm20948_err_t err;
-
-    /* Enable I²C master engine */
-    set_bank(dev, 0);
-    spi_write_reg(dev, REG_USER_CTRL, 0x20);
-    sleep_ms(10);
-
-    set_bank(dev, 3);
-    spi_write_reg(dev, REG_I2C_MST_CTRL, 0x17);   /* 400 kHz */
-
-    /* Reset AK09916 */
-    err = ak_write(dev, AK_REG_CNTL3, 0x01);
-    if (err != ICM20948_OK) return err;
-    sleep_ms(10);
-
-    /* Verify device ID */
-    uint8_t id = 0;
-    err = ak_read(dev, AK_REG_DEVICE_ID, &id);
-    if (err != ICM20948_OK) return err;
-    if (id != AK09916_DEVICE_ID) return ICM20948_ERR_MAG_ID;
-
-    /* Continuous measurement mode 4 → 100 Hz, 16-bit */
-    err = ak_write(dev, AK_REG_CNTL2, 0x08);
-    if (err != ICM20948_OK) return err;
-    sleep_ms(10);
-
-    /*
-     * Configure SLV0 to automatically DMA 9 bytes from AK09916 every sample:
-     *   ST1 (1) | HX HY HZ (6 LE bytes) | ST2 (1) | padding (1) = 9 bytes
-     * Results land at EXT_SLV_SENS_DATA_00 (0x3B) in Bank 0.
-     */
-    set_bank(dev, 3);
-    spi_write_reg(dev, REG_I2C_SLV0_ADDR, AK09916_I2C_ADDR | 0x80); /* read */
-    spi_write_reg(dev, REG_I2C_SLV0_REG,  AK_REG_STATUS1);
-    spi_write_reg(dev, REG_I2C_SLV0_CTRL, 0x89);  /* enable | 9 bytes */
-    set_bank(dev, 0);
-
-    return ICM20948_OK;
-}
 
 /* =========================================================================
  * Public API implementation
@@ -256,7 +173,7 @@ icm20948_err_t icm20948_init(icm20948_dev_t *dev,
     /* ---- Verify chip identity ---- */
     set_bank(dev, 0);
     uint8_t who = spi_read_reg(dev, REG_WHO_AM_I);
-    if (who != ICM20948_WHO_AM_I_VAL) return ICM20948_ERR_WHO_AM_I;
+    if (who != ICM20948_WHO_AM_I_VAL) return who;
 
     /* ---- Software reset ---- */
     spi_write_reg(dev, REG_PWR_MGMT_1, 0x80);
@@ -284,39 +201,48 @@ icm20948_err_t icm20948_init(icm20948_dev_t *dev,
 
     set_bank(dev, 0);
 
-    /* ---- Magnetometer ---- */
-    if (cfg->mag_enable) {
-        icm20948_err_t merr = init_magnetometer(dev);
-        if (merr != ICM20948_OK) return merr;
-    }
-
     return ICM20948_OK;
 }
 
-/* -------------------------------------------------------------------------- */
-
 icm20948_err_t icm20948_read_accel(icm20948_dev_t *dev,
-                                    float *ax, float *ay, float *az) {
-    set_bank(dev, 0);
+                                    int16_t *ax, int16_t *ay, int16_t *az) {
+    
     uint8_t raw[6];
+    set_bank(dev, 0);
     spi_read_bytes(dev, REG_ACCEL_XOUT_H, raw, 6);
-    float s = dev->accel_sens;
-    *ax = (float)to_s16(raw[0], raw[1]) / s * GRAVITY_MS2;
-    *ay = (float)to_s16(raw[2], raw[3]) / s * GRAVITY_MS2;
-    *az = (float)to_s16(raw[4], raw[5]) / s * GRAVITY_MS2;
+    *ax = to_s16(raw[0], raw[1]);
+    *ay = to_s16(raw[2], raw[3]);
+    *az = to_s16(raw[4], raw[5]);      
+
     return ICM20948_OK;
 }
 
 icm20948_err_t icm20948_read_gyro(icm20948_dev_t *dev,
-                                   float *gx, float *gy, float *gz) {
+                                   int16_t *gx, int16_t *gy, int16_t *gz) {
     set_bank(dev, 0);
     uint8_t raw[6];
     spi_read_bytes(dev, REG_GYRO_XOUT_H, raw, 6);
     float s = dev->gyro_sens;
-    *gx = (float)to_s16(raw[0], raw[1]) / s;
-    *gy = (float)to_s16(raw[2], raw[3]) / s;
-    *gz = (float)to_s16(raw[4], raw[5]) / s;
+    *gx = to_s16(raw[0], raw[1]);
+    *gy = to_s16(raw[2], raw[3]);
+    *gz = to_s16(raw[4], raw[5]);
     return ICM20948_OK;
+}
+
+void icm20948_convert_accel(icm20948_dev_t *dev,
+                        icm20948_raw_t *raw, icm20948_data_t *data){
+    float s = dev->accel_sens;
+    data->ax = (float)raw->ax / s * GRAVITY_MS2;
+    data->ay = (float)raw->ay / s * GRAVITY_MS2;
+    data->az = (float)raw->az / s * GRAVITY_MS2;
+}
+
+void icm20948_convert_gyro(icm20948_dev_t *dev,
+                        icm20948_raw_t *raw, icm20948_data_t *data){
+    float s = dev->gyro_sens;
+    data->gx = (float)raw->gx / s;
+    data->gx = (float)raw->gy / s;
+    data->gz = (float)raw->gz / s;
 }
 
 icm20948_err_t icm20948_read_temp(icm20948_dev_t *dev, float *temp_c) {
@@ -328,45 +254,8 @@ icm20948_err_t icm20948_read_temp(icm20948_dev_t *dev, float *temp_c) {
     return ICM20948_OK;
 }
 
-icm20948_err_t icm20948_read_mag(icm20948_dev_t *dev,
-                                  float *mx, float *my, float *mz,
-                                  bool *mag_valid) {
-    if (!dev->cfg.mag_enable) {
-        *mag_valid = false;
-        return ICM20948_ERR_MAG_RDY;
-    }
-
-    /*
-     * DMA shadow at EXT_SLV_SENS_DATA_00 (Bank 0, 0x3B):
-     * Byte 0: ST1  (DRDY = bit 0)
-     * Byte 1: HXL, Byte 2: HXH
-     * Byte 3: HYL, Byte 4: HYH
-     * Byte 5: HZL, Byte 6: HZH
-     * Byte 7: ST2  (HOFL = bit 3)
-     */
-    set_bank(dev, 0);
-    uint8_t raw[9];
-    spi_read_bytes(dev, REG_EXT_SLV_SENS_DATA, raw, 9);
-
-    if (!(raw[0] & 0x01)) {     /* DRDY not set */
-        *mag_valid = false;
-        return ICM20948_ERR_MAG_RDY;
-    }
-    if (raw[7] & 0x08) {        /* HOFL: overflow */
-        *mag_valid = false;
-        return ICM20948_ERR_MAG_OVF;
-    }
-
-    /* AK09916 data is little-endian */
-    *mx = (float)to_s16(raw[2], raw[1]) * MAG_SENS_UT;
-    *my = (float)to_s16(raw[4], raw[3]) * MAG_SENS_UT;
-    *mz = (float)to_s16(raw[6], raw[5]) * MAG_SENS_UT;
-    *mag_valid = true;
-    return ICM20948_OK;
-}
-
 icm20948_err_t icm20948_read_all(icm20948_dev_t *dev,
-                                   icm20948_data_t *out,
+                                   icm20948_raw_t *out,
                                    const icm20948_cal_t *cal) {
     icm20948_err_t err;
 
@@ -376,11 +265,8 @@ icm20948_err_t icm20948_read_all(icm20948_dev_t *dev,
     err = icm20948_read_gyro(dev, &out->gx, &out->gy, &out->gz);
     if (err != ICM20948_OK) return err;
 
-    err = icm20948_read_temp(dev, &out->temperature);
-    if (err != ICM20948_OK) return err;
-
-    /* Mag failures are non-fatal */
-    icm20948_read_mag(dev, &out->mx, &out->my, &out->mz, &out->mag_valid);
+    // err = icm20948_read_temp(dev, &out->temperature);
+    // if (err != ICM20948_OK) return err;
 
     /* ---- Apply calibration ---- */
     if (cal) {
@@ -391,12 +277,6 @@ icm20948_err_t icm20948_read_all(icm20948_dev_t *dev,
         out->gx -= cal->gyro_offset[0];
         out->gy -= cal->gyro_offset[1];
         out->gz -= cal->gyro_offset[2];
-
-        if (out->mag_valid) {
-            out->mx = (out->mx - cal->mag_offset[0]) * cal->mag_scale[0];
-            out->my = (out->my - cal->mag_offset[1]) * cal->mag_scale[1];
-            out->mz = (out->mz - cal->mag_offset[2]) * cal->mag_scale[2];
-        }
     }
 
     return ICM20948_OK;
