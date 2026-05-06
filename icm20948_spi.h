@@ -95,7 +95,7 @@ typedef struct {
         .pin_sck    = PIN_SCK,                                    \
         .pin_mosi   = PIN_MOSI,                                   \
         .pin_miso   = PIN_MISO,                                   \
-        .baudrate   = 8000000,                                  \
+        .baudrate   = 1000000,                                  \
         .gyro_fs    = ICM20948_GYRO_FS_250,                     \
         .accel_fs   = ICM20948_ACCEL_FS_4G,                     \
     }

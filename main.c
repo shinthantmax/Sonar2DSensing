@@ -92,9 +92,10 @@ int main(void)
     icm20948_dev_t imu;
     icm20948_err_t err = icm20948_init(&imu, &cfg);
     printf("Hello1");
-    if (err != ICM20948_OK) {
+    while (err != ICM20948_OK) {
         printf("ERROR: icm20948_init() returned %d\n", err);
-        while (1) tight_loop_contents();
+        icm20948_err_t err = icm20948_init(&imu, &cfg);
+        // while (1) tight_loop_contents();
     }
     printf("WHO_AM_I = 0x%02X  (expect 0xEA)\n\n", icm20948_who_am_i(&imu));
  
@@ -151,7 +152,7 @@ int main(void)
         printf("---\n");
  
 
-        sleep_ms(300);   /* Minimum recommended interval: 60 ms */
+        sleep_ms(100);   /* Minimum recommended interval: 60 ms */
     }
 
     return 0;
